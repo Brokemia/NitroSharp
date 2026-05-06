@@ -55,7 +55,7 @@ namespace NitroSharp.Formats.ROM.NTR {
                         endOffsets[fileId] - startOffsets[fileId], parent) {
                         path = string.Join("/", parent.Path, name)
                     });
-                    // parent.Files.Last().GetFileFromRomStream(binary);
+                    parent.Files.Last().GetFileData(binary);
                 }
             }
 

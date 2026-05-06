@@ -10,7 +10,13 @@ namespace NitroSharp.Formats.NARC {
                 throw new Exception("Not a NARC!");
             if (binary.ReadUInt16() != 0xFFFE)
                 throw new Exception("Little Endian NARCs only!");
-            binary.BaseStream.Position = 0x10;
+            binary.ReadUInt16(); // TODO What this
+            if (binary.ReadUInt32() != data.Length) {
+                throw new Exception("NARC length mismatch!");
+            }
+
+            var fatbPosition = binary.ReadUInt16();
+            binary.BaseStream.Position = fatbPosition;
             FAT = new FATB(binary);
         }
 
@@ -66,13 +72,32 @@ namespace NitroSharp.Formats.NARC {
 
     public class FATB {
         public FATB(BinaryReader binary) {
-            Entries = new List<FATBEntry>();
-            binary.BaseStream.Position = 0x18;
-            var fileCount = binary.ReadUInt16();
-            binary.BaseStream.Position += 0x2;
+            if (binary.ReadByte() != 'B'
+                || binary.ReadByte() != 'T'
+                || binary.ReadByte() != 'A'
+                || binary.ReadByte() != 'F') {
+                throw new Exception("FATB section header missing or wrong");
+            }
+
+            var fatbLength = binary.ReadUInt32();
+
+            var fileCount = binary.ReadUInt32();
+            Entries = new List<FATBEntry>((int)fileCount);
             for (var i = 0; i < fileCount; ++i)
                 Entries.Add(new FATBEntry(binary));
-            binary.BaseStream.Position += 0x18;
+            // TODO This skips over the FNTB, assuming there are no filenames
+            binary.BaseStream.Position += 0x10;
+
+            // FIMG header
+            if (binary.ReadByte() != 'G'
+                || binary.ReadByte() != 'M'
+                || binary.ReadByte() != 'I'
+                || binary.ReadByte() != 'F') {
+                throw new Exception("FIMG section header missing or wrong");
+            }
+
+            var fimgLength = binary.ReadUInt32();
+
             var fimgBase = (uint) binary.BaseStream.Position;
             Entries.ForEach(entry => entry.readBuffer(binary, fimgBase));
         }

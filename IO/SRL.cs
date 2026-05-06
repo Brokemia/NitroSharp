@@ -266,8 +266,8 @@ namespace NitroSharp.IO {
                 binary.Write(Header.Offset_20C);
                 binary.Write(Header.TotalTWLROMSize);
                 binary.Write(Header.Offset_214);
-                binary.Write(Header.Offset_218);
-                binary.Write(Header.Offset_21C);
+                binary.Write(Header.Arm9iParamsOffset);
+                binary.Write(Header.Arm7iParamsOffset);
                 binary.Write(Header.ModcryptOffset);
                 binary.Write(Header.ModcryptSize);
                 binary.Write(Header.Modcrypt2Offset);

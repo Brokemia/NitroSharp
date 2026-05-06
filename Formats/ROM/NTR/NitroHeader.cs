@@ -4,6 +4,9 @@ using System.IO;
 using System.Text;
 using Nito.HashAlgorithms;
 
+// A good reference for this is:
+// NDS: https://problemkaputt.de/gbatek-ds-cartridge-header.htm
+// DSi: https://problemkaputt.de/gbatek-dsi-cartridge-header.htm
 namespace NitroSharp.Formats.ROM.NTR {
     public class NitroHeader {
         public NitroHeader(BinaryReader Binary) {
@@ -46,9 +49,15 @@ namespace NitroSharp.Formats.ROM.NTR {
             SecureAreaDisable = Binary.ReadUInt64();
             RomSize = Binary.ReadUInt32();
             HeaderSize = Binary.ReadUInt32();
-            Reserved2 = Binary.ReadBytes(56);
+            DsiArm9ParamsOffset = Binary.ReadUInt32(); // On NDS this is something unknown
+            DsiArm7ParamsOffset = Binary.ReadUInt32(); // On NDS this is reserved
+            DsiNtrRomRegionEnd = Binary.ReadUInt16(); // On NDS this is reserved
+            DsiTwlRomRegionStart = Binary.ReadUInt16(); // On NDS this is reserved, zero for Dsiware
+            NandEndOfRom = Binary.ReadUInt16(); // In 0x20000-byte units
+            NandStartOfRW = Binary.ReadUInt16(); // Usually same as NandEndOfRom
+            Reserved2 = Binary.ReadBytes(40);
             Logo = Binary.ReadBytes(0x9C);
-            LogoCRC = Binary.ReadUInt16();
+            LogoCRC = Binary.ReadUInt16(); // Should be 0xCF56, TODO add check
             HeaderCRC = Binary.ReadUInt16();
             DebugRomOffset = Binary.ReadUInt32();
             DebugSize = Binary.ReadUInt32();
@@ -56,6 +65,7 @@ namespace NitroSharp.Formats.ROM.NTR {
             Reserved3 = Binary.ReadUInt32();
             Reserved4 = Binary.ReadBytes(0x10);
 
+            // DSi Support
             if (HeaderSize > 0x200 && (UnitCode & 2) > 0) {
                 GlobalMbkSetting = new List<byte[]>();
                 ARM9MbkSetting = new List<uint>();
@@ -75,15 +85,15 @@ namespace NitroSharp.Formats.ROM.NTR {
                 RegionFlags = Binary.ReadUInt32();
                 AccessControl = Binary.ReadUInt32();
                 SCFGExtMask = Binary.ReadUInt32();
-                AppFlags = Binary.ReadBytes(4);
+                AppFlags = Binary.ReadBytes(4); // Last byte is present on some NDS titles
 
                 ARM9iOffset = Binary.ReadUInt32();
-                ARM9iEntryAddress = Binary.ReadUInt32();
+                ARM9iEntryAddress = Binary.ReadUInt32(); // Allegedly this name is wrong
                 ARM9iRamAddress = Binary.ReadUInt32();
                 ARM9iSize = Binary.ReadUInt32();
 
                 ARM7iOffset = Binary.ReadUInt32();
-                ARM7iEntryAddress = Binary.ReadUInt32();
+                ARM7iEntryAddress = Binary.ReadUInt32(); // Allegedly this name is wrong
                 ARM7iRamAddress = Binary.ReadUInt32();
                 ARM7iSize = Binary.ReadUInt32();
 
@@ -100,12 +110,12 @@ namespace NitroSharp.Formats.ROM.NTR {
                 DigestSectorSize = Binary.ReadUInt32();
                 DigestBlockSectorCount = Binary.ReadUInt32();
                 BannerSize = Binary.ReadUInt32();
-                Offset_20C = Binary.ReadUInt32();
+                Offset_20C = Binary.ReadUInt32(); // Has more details in linked document
 
                 TotalTWLROMSize = Binary.ReadUInt32();
                 Offset_214 = Binary.ReadUInt32();
-                Offset_218 = Binary.ReadUInt32();
-                Offset_21C = Binary.ReadUInt32();
+                Arm9iParamsOffset = Binary.ReadUInt32();
+                Arm7iParamsOffset = Binary.ReadUInt32();
 
                 ModcryptOffset = Binary.ReadUInt32();
                 ModcryptSize = Binary.ReadUInt32();
@@ -121,14 +131,14 @@ namespace NitroSharp.Formats.ROM.NTR {
                 HMACARM9 = Binary.ReadBytes(20);
                 HMACARM7 = Binary.ReadBytes(20);
                 HMACDigestMaster = Binary.ReadBytes(20);
-                HMACTitleIcon = Binary.ReadBytes(20);
+                HMACTitleIcon = Binary.ReadBytes(20); // Also present in some newer NDS titles, TODO check if true for Pokemon
                 HMACARM9i = Binary.ReadBytes(20);
                 HMACARM7i = Binary.ReadBytes(20);
-                Reserved6 = Binary.ReadBytes(40);
+                Reserved6 = Binary.ReadBytes(40); // Used for non-whitelisted NDS titles
                 HMACARM9NoSecure = Binary.ReadBytes(20);
                 Reserved7 = Binary.ReadBytes(0xA4C);
                 DebugArguments = Binary.ReadBytes(0x180);
-                RsaSignature = Binary.ReadBytes(0x80);
+                RsaSignature = Binary.ReadBytes(0x80); // Present on some NDS titles
             }
         }
 
@@ -169,6 +179,12 @@ namespace NitroSharp.Formats.ROM.NTR {
         public ulong SecureAreaDisable { get; set; }
         public uint RomSize { get; set; }
         public uint HeaderSize { get; set; }
+        public uint DsiArm9ParamsOffset { get; set; }
+        public uint DsiArm7ParamsOffset { get; set; }
+        public ushort DsiNtrRomRegionEnd { get; set; }
+        public ushort DsiTwlRomRegionStart { get; set; }
+        public ushort NandEndOfRom { get; set; }
+        public ushort NandStartOfRW { get; set; }
         public byte[] Reserved2 { get; set; }
         public byte[] Logo { get; set; }
         public ushort LogoCRC { get; set; }
@@ -211,8 +227,8 @@ namespace NitroSharp.Formats.ROM.NTR {
         public uint Offset_20C { get; set; }
         public uint TotalTWLROMSize { get; set; }
         public uint Offset_214 { get; set; }
-        public uint Offset_218 { get; set; }
-        public uint Offset_21C { get; set; }
+        public uint Arm9iParamsOffset { get; set; }
+        public uint Arm7iParamsOffset { get; set; }
         public uint ModcryptOffset { get; set; }
         public uint ModcryptSize { get; set; }
         public uint Modcrypt2Offset { get; set; }
@@ -242,7 +258,7 @@ namespace NitroSharp.Formats.ROM.NTR {
             temporary.Write(BitConverter.GetBytes(header.UnitCode));
             temporary.Write(BitConverter.GetBytes(header.EncryptionSeed));
             temporary.Write(BitConverter.GetBytes(header.DeviceCapacity));
-            temporary.Write(new byte[7]);
+            temporary.Write(header.Reserved);
             temporary.Write(BitConverter.GetBytes(header.TWLInternalFlags));
             temporary.Write(BitConverter.GetBytes(header.PermitsFlags));
             temporary.Write(BitConverter.GetBytes(header.RomVersion));
@@ -261,6 +277,8 @@ namespace NitroSharp.Formats.ROM.NTR {
             temporary.Write(BitConverter.GetBytes(header.FileAllocationTableSize));
             temporary.Write(BitConverter.GetBytes(header.ARM9OverlayTableOffset));
             temporary.Write(BitConverter.GetBytes(header.ARM9OverlayTableSize));
+            temporary.Write(BitConverter.GetBytes(header.ARM7OverlayTableOffset));
+            temporary.Write(BitConverter.GetBytes(header.ARM7OverlayTableSize));
             temporary.Write(BitConverter.GetBytes(header.FlagsRead));
             temporary.Write(BitConverter.GetBytes(header.FlagsInit));
             temporary.Write(BitConverter.GetBytes(header.BannerOffset));
@@ -271,6 +289,12 @@ namespace NitroSharp.Formats.ROM.NTR {
             temporary.Write(BitConverter.GetBytes(header.SecureAreaDisable));
             temporary.Write(BitConverter.GetBytes(header.RomSize));
             temporary.Write(BitConverter.GetBytes(header.HeaderSize));
+            temporary.Write(BitConverter.GetBytes(header.DsiArm9ParamsOffset));
+            temporary.Write(BitConverter.GetBytes(header.DsiArm7ParamsOffset));
+            temporary.Write(BitConverter.GetBytes(header.DsiNtrRomRegionEnd));
+            temporary.Write(BitConverter.GetBytes(header.DsiTwlRomRegionStart));
+            temporary.Write(BitConverter.GetBytes(header.NandEndOfRom));
+            temporary.Write(BitConverter.GetBytes(header.NandStartOfRW));
             temporary.Write(header.Reserved2);
             temporary.Write(header.Logo);
             temporary.Write(BitConverter.GetBytes(header.LogoCRC));
@@ -282,16 +306,15 @@ namespace NitroSharp.Formats.ROM.NTR {
             temporary.Write(header.Reserved4);
 
 
+            var headerBytes = temporary.ToArray();
             var calculator = new CRC16();
             header.HeaderCRC =
-                BitConverter.ToUInt16(
-                    calculator.ComputeHash(new ArraySegment<byte>(temporary.ToArray(), 0, 0x15E).Array));
+                BitConverter.ToUInt16(calculator.ComputeHash(headerBytes[..0x15E]));
             header.LogoCRC =
-                BitConverter.ToUInt16(
-                    calculator.ComputeHash(new ArraySegment<byte>(temporary.ToArray(), 0xC0, 0x9C).Array));
-            header.SecureCrc16 = BitConverter.ToUInt16(calculator.ComputeHash(
-                new ArraySegment<byte>(temporary.ToArray(), (int) header.ARM9Offset,
-                    (int) (0x8000 - 2 * header.ARM9Offset)).Array));
+                BitConverter.ToUInt16(calculator.ComputeHash(headerBytes[0xC0..0x15C]));
+            // TODO this doesn't work at all because the stream only contains the header
+            header.SecureCrc16 =
+                BitConverter.ToUInt16(calculator.ComputeHash(headerBytes[(int)header.ARM9Offset..(int)(0x8000 - 2 * header.ARM9Offset)]));
             temporary.Close();
         }
     }
